@@ -1,0 +1,60 @@
+import re
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from bs4 import BeautifulSoup
+import time
+
+def get_currency():
+    page = requests.get('https://www.profinance.ru/currency_usd.asp')
+    soup = BeautifulSoup(page.content, "html.parser")
+    currency = float(soup.find_all('td', class_='cell')[5].get_text())
+    return currency
+
+browser = webdriver.Chrome() 
+url = 'https://market.csgo.com/?r=&q=&p=1&h='
+browser.get('https://steamcommunity.com/openid/login?openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.mode=checkid_setup&openid.return_to=https%3A%2F%2Fdota2.net%2Flogin%2Findex.php%3Fgetmid%3Dcsgocom%26login%3D1%26ip%3D94930776.hyiHGLbYJv&openid.realm=https%3A%2F%2Fdota2.net&openid.ns.sreg=http%3A%2F%2Fopenid.net%2Fextensions%2Fsreg%2F1.1&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select')
+time.sleep(25)
+p=j=0
+stmprices = [0] * 20
+while True:
+    i = p%15 + 1
+    p += 1
+    try:
+        if j%4 == 0 and p%15 == 1:
+            page = requests.get(url)
+            soup = BeautifulSoup(page.content, "html.parser")
+            namelist = soup.find_all('div', class_='name')
+            linklist = soup.find_all('a', class_='item' or 'item hot', href=True)
+            currency = get_currency()
+        name = namelist[i].get_text().replace('\n', '').replace(' ', '%20')
+        link = linklist[i].get('href')
+        browser.get('https://market.csgo.com' + link)
+        print(name)
+        if j%4 == 0:
+            steampage = requests.get('https://steamcommunity.com/market/search?l=russian&q=' + name)
+            steamsoup = BeautifulSoup(steampage.content, "html.parser")
+            stmprice = steamsoup.find('span', class_='normal_price').get_text()
+            stmprice = float(stmprice[22:26])
+            stmprices[i] = stmprice
+        price = float(browser.find_element_by_class_name('ip-bestprice').text.replace('\n', '').replace('&nbsp;', ''))
+        newprice = currency * (stmprices[i] / 2)
+        if newprice > price:
+            newprice = price * 0.9
+        if newprice < 70:
+            button = browser.find_element_by_id('autobuy_ok')
+            button.click()
+            time.sleep(2)
+            elem = browser.find_element_by_id('autobuy_val')
+            elem.clear()
+            elem.send_keys(str(newprice)[0:4])
+            button.click()
+            time.sleep(6)
+            button = browser.find_element_by_id('info_dialog_url')
+            button.click()
+            time.sleep(0.5)    
+    except:
+        time.sleep(5)
+        pass
+    if p%15 == 0:
+        j += 1

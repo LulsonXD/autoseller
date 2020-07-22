@@ -16,7 +16,7 @@ url = 'https://market.csgo.com/?r=&q=&p=1&h='
 browser.get('https://steamcommunity.com/openid/login?openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.mode=checkid_setup&openid.return_to=https%3A%2F%2Fdota2.net%2Flogin%2Findex.php%3Fgetmid%3Dcsgocom%26login%3D1%26ip%3D94930776.hyiHGLbYJv&openid.realm=https%3A%2F%2Fdota2.net&openid.ns.sreg=http%3A%2F%2Fopenid.net%2Fextensions%2Fsreg%2F1.1&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select')
 time.sleep(25)
 p=j=0
-stmprices = [0] * 20
+stmprices = [0] * 15
 while True:
     i = p%15 + 1
     p += 1
@@ -44,12 +44,12 @@ while True:
         if newprice < 70:
             button = browser.find_element_by_id('autobuy_ok')
             button.click()
-            time.sleep(2)
+            time.sleep(1.5)
             elem = browser.find_element_by_id('autobuy_val')
             elem.clear()
-            elem.send_keys(str(newprice)[0:4])
+            elem.send_keys(str(newprice)[0:5])
             button.click()
-            time.sleep(6)
+            time.sleep(5)
             button = browser.find_element_by_id('info_dialog_url')
             button.click()
             time.sleep(0.5)    

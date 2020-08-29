@@ -1,0 +1,75 @@
+import re
+import requests
+from bs4 import BeautifulSoup
+import pyotp
+from playsound import playsound
+import time
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+
+def get_currency():
+    page = requests.get('https://www.profinance.ru/currency_usd.asp')
+    soup = BeautifulSoup(page.content, "html.parser")
+    currency = float(soup.find_all('td', class_='cell')[5].get_text())
+    return currency
+
+browser = webdriver.Chrome() 
+url = 'https://market.csgo.com/?r=&q=&p=1&h='
+browser.get('https://steamcommunity.com/openid/login?openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.mode=checkid_setup&openid.return_to=https%3A%2F%2Fdota2.net%2Flogin%2Findex.php%3Fgetmid%3Dcsgocom%26login%3D1%26ip%3D94930776.hyiHGLbYJv&openid.realm=https%3A%2F%2Fdota2.net&openid.ns.sreg=http%3A%2F%2Fopenid.net%2Fextensions%2Fsreg%2F1.1&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select')
+time.sleep(35)
+
+my_secret = 'TGYNQYFHQ5XPZ7QB'
+p = 0
+while True:
+    i = p%30 + 1
+    if i == 1:
+        r = 1
+    p += 1
+    page = requests.get("https://market.csgo.com/en/?r=&q=&p=" + str(i) + "&rs=1;500000&h=")
+    soup = BeautifulSoup(page.content, "html.parser")
+    namelist = soup.find_all('div', class_='name')
+    pricelist = soup.find_all('div', class_='price')
+    linklist = soup.find_all('a', class_='item' or 'item hot', href=True)
+    for j in range(r, 56):
+        r = 0
+        my_token = pyotp.TOTP(my_secret)
+        price = float(pricelist[j].get_text().replace(' ', ''))
+        name = namelist[j].get_text().replace('\n', '').replace(' ', '%20')
+        url = "https://bitskins.com/api/v1/get_steam_price_data/?api_key=bc770a45-5bf9-4f76-924f-d6b92ecd1c29&code=" + my_token.now() + "&market_hash_name=" + name
+        info = requests.get(url)
+        infosoup = BeautifulSoup(info.content, "html.parser")
+        stmprice = list(infosoup.children)[0]
+        result = re.findall("price\W*\d*\W*\d*", stmprice)
+        #try:
+        niceprice = float(result[len(result) - 1].replace('price": "', ''))
+        ctrlprice = float(result[len(result) - 2].replace('price": "', ''))
+        profit = niceprice / price
+        if niceprice > ctrlprice:
+            t = ctrlprice
+            ctrlprice = niceprice
+            niceprice = t             
+        if (ctrlprice / niceprice) > 1.1:
+            name = "XD " + name
+        if profit > 1.45:
+            link = 'https://market.csgo.com' + linklist[j].get('href')
+            tmpage = requests.get(link)
+            tmsoup =  BeautifulSoup(tmpage.content, "html.parser")
+            price = float(tmsoup.find(class_='ip-bestprice').text.replace('\n', '').replace('&nbsp;', ''))
+            profit = niceprice / price
+            if profit > 1.45:
+                while profit > 1.45:
+                    browser.get(link)
+                    time.sleep(1)
+                    button = browser.find_element_by_class_name('cs_buy-btn btn buy-btn')
+                    button.click()
+                    time.sleep(5)
+                    button = browser.find_element_by_id('info_dialog_url')
+                    button.click()
+                    time.sleep(1.5)
+                    browser.get(link)
+                    price = float(browser.find_element_by_class_name('ip-bestprice').text.replace('\n', '').replace('&nbsp;', ''))
+                    profit = niceprice / price 
+                playsound('D:\\videoplayback.wav')
+                print(name.replace('%20', ' '), '|', price * get_currency(), '|', profit)
+        #except:
+            pass

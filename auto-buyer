@@ -1,0 +1,268 @@
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+import time
+import re
+import cloudscraper
+import linecache
+import sys
+import json
+
+# основной цикл устанавливает цены на автопокупку и проверяет, насколько установленная цена конкурентно способна
+# цикл в начале каждой итерации основного цикла фиксирует конкурентно способные выгодные цены, повышая их на 1 копейку
+# вещи, поседние 500 продаж которых растягиваются более чем на n дней, не рассматриваются
+# важно установить, насколько стабильна цена вещи, для этого можно брать промежутки в ~ 3 дня за последние 18 дней и сравнивать их средние цены
+# если между двумя подряд идущими или между первым и послендним промежутком цена различается больще чем на 15%, то предмет считается нестабильным и должен быть рассмотрен вручную
+
+# определение цены:
+# получаем цены продаж предмета
+# делим цены на временные промежутки
+# в каждом промежутке сортируем по порядку неубывания
+# устанавливаемая цена - средняя из самых низких цен
+# получаем список самых низких цен: берем самую низкую цену и включаем в список k цен, отличающихся от самой низкой не более чем на r%
+# если таких цен меньше, чем k, то в качестве самой низкой берем следующую по малости
+# если таким образом не будет получен список самых малых цен, то выводим сообщение в консоль
+
+key = 'your key'
+scraper = cloudscraper.create_scraper()
+cookies = {"PHPSESSID": "295141008%3Ahrjsum0obcnpmvvuvsqdg5827h"}
+selcookie = {'name': "PHPSESSID",
+             'value': "295141008%3Ahrjsum0obcnpmvvuvsqdg5827h"}
+
+ms = 86400
+
+def get_lowest(prices):
+    prices = sorted(prices)
+    pRange = prices[-1] - prices[0]
+    ceil = pRange * 0.2 + prices[0]
+    lowestPrices = []
+    """
+    k = 7
+    r = 1.1
+    t = 1
+    i = t
+    while i < k and k < len(prices):
+        if prices[i] < lowest * r:
+            lowestPrices.append(prices[i])
+            i += 1
+        else:
+            lowestPrices = []
+            t += 1
+            i = t
+            k += 1
+    """
+    for price in prices:
+        if price < ceil:
+            lowestPrices.append(price)
+    return lowestPrices
+
+def get_prices(sells):
+    prices = []
+    for i in range(len(sells)):
+        prices.append(float(sells[i]['l_price']))
+    return prices
+
+def group_by_date(sells, k):
+    groups = [[] for i in range(k)]
+    p = 0
+    for i in range(k):
+        j = p + 1
+        groups[i].append(sells[p])
+        while float(sells[p]['l_time']) - float(sells[j]['l_time']) < 4 * ms:
+            groups[i].append(sells[j])
+            j += 1
+            if j >= len(sells):
+                break
+        p = j
+    return groups
+
+def pushItems(items, res):
+    ordurl = 'https://market.csgo.com/api/MassInfo/0/1/0/0?key=uN7GpMq7S3LoUlc8i3tAppHm3U58w1b'
+    l = len(items)
+    for i in range(len(items)):
+        price = items[i][-1] * 80
+        altPrice = items[i][-1] * 100
+        class_id = items[i][0]
+        instance_id = items[i][1]
+        if i % 99 == 0:
+            reqItems = ''
+            if l < 99:
+                k = l
+            else:
+                k = 99
+                l -= 99
+            for j in range(k):
+                reqItems = reqItems+items[i + j][0]+'_'+items[i + j][1]+','
+            res = requests.post(ordurl, data = {'list':reqItems}).json()
+        myOffer = res['results'][i % 99]['buy_offers']['my_offer']
+        bestOffer = res['results'][i % 99]['buy_offers']['best_offer']
+        if myOffer != bestOffer and bestOffer <= price:
+            newPrice = price
+            buyurl = 'https://market.csgo.com/api/ProcessOrder/'+str(class_id)+'/'+str(instance_id)+'/'+str(newPrice)+'/?key='+key
+            r = requests.get(buyurl).json()
+            print(r['success'], items[i][11])
+        else:
+            if myOffer != bestOffer and bestOffer <= altPrice:
+                newPrice = bestOffer + 1
+                buyurl = 'https://market.csgo.com/api/ProcessOrder/'+str(class_id)+'/'+str(instance_id)+'/'+str(newPrice)+'/?key='+key
+                r = requests.get(buyurl).json()
+                print(r['success'], items[i][11])
+    return res
+
+"""
+mainPage = 'https://market.csgo.com/en/?r=&q=&p='+str(i)+'&h='
+r = scraper.get(mainPage, cookies = cookies)
+soup = BeautifulSoup(r.content, "html.parser")
+names = soup.find_all('div', class_='name')
+links = soup.find_all('a', class_='item', href=True)
+for j in range(p, 56):
+"""
+review = open('D:/JavuKachatt/review.txt', 'a', encoding="utf8")
+main = open('D:/JavuKachatt/main.txt', 'r+', encoding="utf8")
+dataBase = open('D:/JavuKachatt/new.csv','r', encoding="utf8")
+recommend = open('D:/JavuKachatt/recommend.txt', 'a', encoding="utf8")
+
+res = None
+
+strings = dataBase.read().split('\n')
+del strings[0]
+del strings[-1]
+i = 0
+while i < len(strings):
+    strings[i] = strings[i].split(';')
+    strings[i][3] = int(strings[i][3])
+    if int(strings[i][2]) < 10000:
+        del strings[i]
+        continue
+    i += 1
+i = 0
+
+while i < len(strings):
+    old = strings[i]
+    sameName = [i]
+    print(i, len(strings))
+    for j in range(i + 1, len(strings)):
+        if strings[i][11] == strings[j][11]:
+            sameName.append(j)
+    while len(sameName) != 1:
+        if strings[sameName[-2]][3] > strings[sameName[-1]][3]:
+            n = sameName[-1]
+            m = -1
+        else:
+            sameName[-1] -= 1
+            n = sameName[-2]
+            m = -2
+        del strings[n]
+        del sameName[m]
+    if strings[i] == old:
+        i += 1
+strings.sort(key=lambda item: item[3], reverse=True)
+main.write(json.dumps(strings))
+main.close()
+main = open('D:/JavuKachatt/main.txt', 'r+', encoding="utf8")
+
+strings = json.loads(main.read())
+main.close()
+itemsToPush = []
+i = 0
+repeats = 2
+#requests.get('https://market.csgo.com/api/DeleteOrders/?key='+key)
+while i < len(strings):
+    try:
+        class_id = strings[i][0]
+        instance_id = strings[i][1]
+        url = 'https://market.csgo.com/api/ItemHistory/'+class_id+'_'+instance_id+'/?key='+key
+        data = requests.get(url).json()
+        if 'history' in data:
+            sells = data['history']
+        else:
+            del strings[i]
+            continue
+        if len(sells) < 500:
+            del strings[i]
+            continue
+        k = 6
+        daysTotal = (float(sells[0]['l_time']) - float(sells[-1]['l_time'])) / ms
+        if daysTotal < k * 4:
+            k = int((daysTotal / 4) % 6)
+        if k == 0:
+            k = 1
+        isStable = True
+        groups = group_by_date(sells, k)
+        avPrices = []
+        allPrices = []
+        for c in range(k):
+            prices = get_prices(groups[c])
+            s = 0
+            for j in range(len(prices)):
+                s += prices[j]
+                allPrices.append(prices[j])
+            avPrice = s / len(prices) / 100
+            avPrices.append(avPrice)
+        lowest = get_lowest(allPrices)
+        ss = 0
+        for item in avPrices:
+            ss += item
+        avTotal = ss / k
+        r = 1.1
+        if k > 1:
+            for j3 in range(k - 1):
+                if avPrices[0] > avPrices[j3 + 1] * r or avPrices[0] < avPrices[j3 + 1] / r:
+                    isStable = False
+        orName = strings[i][11]
+        name = orName.replace(' ', '%20').replace('"', '')
+        sss = 0
+        for item in lowest:
+            sss += item
+        avLowest = None
+        if len(lowest) != 0:
+            avLowest = sss / len(lowest) / 100
+        price = int(sells[0]['l_price']) / 100
+        if price < 300:
+            coef = 1.2
+        else:
+            coef = 1.16
+        if avLowest * coef < avTotal and avLowest != None:
+            newPrice = avLowest
+            if isStable:
+                recommend.write(class_id+' '+instance_id+' '+orName+' '+str(price)+' '+str(newPrice)+'\n')
+                strings[i].append(newPrice)
+                itemsToPush.append(strings[i])
+            else:
+                review.write(class_id+' '+instance_id+' '+orName+' '+str(price)+' '+str(newPrice)+'\n')
+        if i % 5 == 0:
+                res = pushItems(itemsToPush, res)
+        """
+        steamURL = 'https://steamcommunity.com/market/priceoverview/?country=DE&currency=5&format=json&appid=730&market_hash_name='+name
+        steamCheck = requests.get(steamURL).json()
+        if steamCheck != None:
+            steamPrice = float(steamCheck['lowest_price'].replace(' pуб.', '').replace(',', '.'))
+        else:
+            time.sleep(20)
+            i -= 1
+            print('repeating...', repeats)
+            continue
+        time.sleep(1.5)
+        """
+
+        repeats = 2
+        i += 1
+        print(i, 'cycles ended...')
+    except Exception as e:
+        exception_type, exception_object, exception_traceback = sys.exc_info()
+        line_number = exception_traceback.tb_lineno
+        print(line_number, str(e), strings[i][11], class_id, instance_id)
+        if str(e) == "'history'":
+            del strings[i]
+        errors = open('D:/JavuKachatt/errors.txt', 'a', encoding="utf8") 
+        errors.write(str(e)+str(line_number)+'\n')
+        errors.close()
+        i += 1
+        pass
+while True:
+    res = pushItems(itemsToPush, res)
+    time.sleep(2)
+main = open('D:/JavuKachatt/main.txt', 'w', encoding="utf8")
+main.write(json.dumps(strings))
+main.close()
+

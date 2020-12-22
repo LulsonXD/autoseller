@@ -1,0 +1,59 @@
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+import time
+from datetime import datetime
+import re
+import cloudscraper
+import linecache
+import sys
+import json
+
+
+key = 'uN7GpMq7S3LoUlc8i3tAppHm3U58w1b'
+
+pushItems = open('D:/JavuKachatt/pushItems.txt', 'r', encoding="utf8")
+pushItems = pushItems.read().split('\n')
+while datetime.now().hour < 23 and datetime.now().minute < 59:
+    try:
+        f = open('D:/JavuKachatt/pushItems.txt', 'r', encoding="utf8")
+        pushItems = f.read().split('\n')
+        f.close()
+        urlMy = 'https://market.csgo.com/api/Trades/?key='+key
+        myItems = requests.get(urlMy).json()
+        for i in range(len(pushItems)):
+            try:
+                pushItems[i] = pushItems[i].split(' ')
+                class_id = pushItems[i][0]
+                instance_id = pushItems[i][1]
+                allowedPrice = float(pushItems[i][2])
+                isSold = True
+                for item in myItems:
+                    if item['i_classid'] == class_id and item['i_instanceid'] == instance_id:
+                        isSold = False
+                        myItem = item
+                myPrice = myItem['ui_price']
+                urlBest = 'https://market.csgo.com/api/BestSellOffer/'+class_id+'_'+instance_id+'/?key='+key
+                curPrice = float(requests.get(urlBest).json()["best_offer"]) / 100
+                if not isSold and allowedPrice < curPrice:
+                    for item in myItems:
+                        if item['i_classid'] == class_id and item['i_instanceid'] == instance_id:
+                            id = item['ui_id']
+                            if myPrice != curPrice:
+                                newPrice = str(curPrice * 100 - 1)
+                            else:
+                                
+                                newPrice = str(curPrice * 100 + 50)
+                            urlBuy = 'https://market.csgo.com/api/SetPrice/'+id+'/'+newPrice+'/?key='+key
+                            requests.get(urlBuy)
+            except Exception as e:
+                exception_type, exception_object, exception_traceback = sys.exc_info()
+                line_number = exception_traceback.tb_lineno
+                print(str(e), line_number, time.time(), class_id, instance_id)
+                pass
+        
+    except Exception as e:
+        exception_type, exception_object, exception_traceback = sys.exc_info()
+        line_number = exception_traceback.tb_lineno
+        print(str(e), line_number, time.time(), class_id, instance_id)
+        pass

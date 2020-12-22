@@ -1,59 +1,69 @@
 import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
 import time
 from datetime import datetime
 import re
-import cloudscraper
-import linecache
-import sys
 import json
+import sys
 
 
 key = 'uN7GpMq7S3LoUlc8i3tAppHm3U58w1b'
-
-pushItems = open('D:/JavuKachatt/pushItems.txt', 'r', encoding="utf8")
-pushItems = pushItems.read().split('\n')
-while datetime.now().hour < 23 and datetime.now().minute < 59:
+ms = 86400
+#while datetime.now().hour < 23 and datetime.now().minute < 59:
+while True:
     try:
-        f = open('D:/JavuKachatt/pushItems.txt', 'r', encoding="utf8")
-        pushItems = f.read().split('\n')
+        f = open('exceptions.txt', 'r')
+        exceptions = f.read().split('\n')
         f.close()
         urlMy = 'https://market.csgo.com/api/Trades/?key='+key
         myItems = requests.get(urlMy).json()
-        for i in range(len(pushItems)):
-            try:
-                pushItems[i] = pushItems[i].split(' ')
-                class_id = pushItems[i][0]
-                instance_id = pushItems[i][1]
-                allowedPrice = float(pushItems[i][2])
-                isSold = True
-                for item in myItems:
-                    if item['i_classid'] == class_id and item['i_instanceid'] == instance_id:
-                        isSold = False
-                        myItem = item
-                myPrice = myItem['ui_price']
-                urlBest = 'https://market.csgo.com/api/BestSellOffer/'+class_id+'_'+instance_id+'/?key='+key
-                curPrice = float(requests.get(urlBest).json()["best_offer"]) / 100
-                if not isSold and allowedPrice < curPrice:
-                    for item in myItems:
-                        if item['i_classid'] == class_id and item['i_instanceid'] == instance_id:
-                            id = item['ui_id']
-                            if myPrice != curPrice:
-                                newPrice = str(curPrice * 100 - 1)
-                            else:
-                                
-                                newPrice = str(curPrice * 100 + 50)
-                            urlBuy = 'https://market.csgo.com/api/SetPrice/'+id+'/'+newPrice+'/?key='+key
-                            requests.get(urlBuy)
-            except Exception as e:
-                exception_type, exception_object, exception_traceback = sys.exc_info()
-                line_number = exception_traceback.tb_lineno
-                print(str(e), line_number, time.time(), class_id, instance_id)
-                pass
-        
+        for i in range(len(myItems)):
+            class_id = myItems[i]['i_classid']
+            instance_id = myItems[i]['i_instanceid']
+            urlCheck = 'https://market.csgo.com/api/ItemHistory/'+class_id+'_'+instance_id+'/?key='+key
+            data = requests.get(urlCheck).json()
+            sells = data['history']
+            daysTotal = (float(sells[0]['l_time']) - float(sells[-1]['l_time'])) / ms
+            k = 4
+            if daysTotal < k:
+                k = daysTotal
+            group = []
+            group.append(sells[0])
+            j = 1
+            while float(sells[0]['l_time']) - float(sells[j]['l_time']) < k * ms:
+                group.append(sells[j])
+                j += 1
+                if j >= len(sells):
+                    break
+            m = s = 0
+            for item in group:
+                s += int(item['l_price'])
+                if int(item['l_price']) > m:
+                    m = int(item['l_price'])
+            avg = s / len(group)
+            excepted = False
+            for item in exceptions:
+                if exceptions[0] == class_id and exceptions[1] == instance_id:
+                    excepted = True
+            if excepted:
+                allowedPrice = float(exceptions[i][2])
+            else:
+                allowedPrice = avg
+            myPrice = myItems[i]['ui_price']
+            urlBest = 'https://market.csgo.com/api/BestSellOffer/'+class_id+'_'+instance_id+'/?key='+key
+            curPrice = float(requests.get(urlBest).json()["best_offer"]) / 100
+            if allowedPrice < curPrice:
+            id = items[i]['ui_id']
+            if myPrice != curPrice:
+                newPrice = str(curPrice * 100 - 1)
+            else:
+                newPrice = str(m * 0.95)
+            urlBuy = 'https://market.csgo.com/api/SetPrice/'+id+'/'+newPrice+'/?key='+key
+            requests.get(urlBuy)
     except Exception as e:
         exception_type, exception_object, exception_traceback = sys.exc_info()
         line_number = exception_traceback.tb_lineno
         print(str(e), line_number, time.time(), class_id, instance_id)
         pass
+requests.get('https://market.csgo.com/api/RemoveAll/?key='+key)
+
